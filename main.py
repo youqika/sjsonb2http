@@ -38,6 +38,7 @@ class Transformer(object):
         self._io_loop = io_loop
         self._sock_lsn = sock_lsn
         self._cli_conn = {} # 连接集
+        self._MAX_CONNECTIONS = 1
         self._PROTO_MAGIC_NO = 0xE78F8A9D
         self._LEN_HEADER = 20
         self._LEN_MIN_LOADING = 2
@@ -75,14 +76,14 @@ class Transformer(object):
             logging.debug("cant parse header, length not enough")
             return
 
-        idx_magic = conn["rbuf"].find(self._PROTO_MAGIC_NO)
+        idx_magic = conn["rbuf"].find(struct.pack("!I", self._PROTO_MAGIC_NO))
         if -1 == idx_magic:
             # 无法找到包头
             logging.debug("magic number not found")
             conn["rbuf"] = "" # 清缓冲
             return
 
-        cont["rbuf"] = conn["rbuf"][idx_magic :] # 丢弃无效数据
+        conn["rbuf"] = conn["rbuf"][idx_magic :] # 丢弃无效数据
 
         _, version, start_ofst, length, checksum = struct.unpack(
             "!5I", conn["rbuf"][0 : self._LEN_HEADER]
@@ -102,6 +103,7 @@ class Transformer(object):
         conn["rbuf"] = conn["rbuf"][start_ofst+length :] # 丢弃已解析的数据
 
         try:
+            logging.debug("request: {}".format(context_data))
             cli_obj = json.loads(context_data)
         except ValueError as e:
             return
@@ -109,7 +111,7 @@ class Transformer(object):
 
     ''' 连接回调 '''
     def handle_connection(self, fd, events):
-        if len(self._cli_conn) >= MAX_CONNECTIONS:
+        if len(self._cli_conn) >= self._MAX_CONNECTIONS:
             # 过载保护
             while True:
                 try:
