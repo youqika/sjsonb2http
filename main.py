@@ -16,7 +16,8 @@ import errno
 import socket
 import json
 import logging
-# import my_store.crash_on_ipy
+import urllib, httplib
+import crash_on_ipy
 
 from functools import partial
 from tornado.ioloop import IOLoop
@@ -45,10 +46,21 @@ class Transformer(object):
         self._LEN_MIN_PACK = self._LEN_HEADER + self._LEN_MIN_LOADING # 最小包长度(包头+最小json对象)
 
 
+    '''
+    sjsonb协议打包函数
+    '''
+    def _pack_sjsonb(cargo):
+        str_cargo = json.dumps(cargo, separators=(",", ":"))
+        package = struct.pack("!5I{}s".format(len(str_cargo)),
+                              self._PROTO_MAGIC_NO, 0, self._LEN_HEADER,
+                              len(str_cargo), 0, str_cargo)
+        return package
+
+
     def _release_conn(self, conn):
         skt = conn["socket"]
 
-        del self._cli_conn[addr2string(skt.getpeername())] # 从连接集中剔除
+        del self._cli_conn[skt] # 从连接集中剔除
         self._io_loop.remove_handler(skt.fileno()) # 停止监视
         skt.close()
 
@@ -80,7 +92,7 @@ class Transformer(object):
         if -1 == idx_magic:
             # 无法找到包头
             logging.debug("magic number not found")
-            conn["rbuf"] = "" # 清缓冲
+            self._release_conn(conn)
             return
 
         conn["rbuf"] = conn["rbuf"][idx_magic :] # 丢弃无效数据
@@ -90,7 +102,7 @@ class Transformer(object):
         )
         if (start_ofst < self._LEN_HEADER or length < 2 or length > 4096):
             logging.debug("invalid package")
-            conn["rbuf"] = "" # 清缓冲
+            self._release_conn(conn)
             return
 
         len_pending = len(conn["rbuf"][start_ofst :])
@@ -106,7 +118,27 @@ class Transformer(object):
             logging.debug("request: {}".format(context_data))
             cli_obj = json.loads(context_data)
         except ValueError as e:
+            self._release_conn(conn)
             return
+
+        '''===== 协议解析完成 ====='''
+
+        if "method" not in cli_obj:
+            self._release_conn(conn)
+            return
+
+        if "url" not in cli_obj:
+            self._release_conn(conn)
+            return
+
+        if "jpush_msg" not in cli_obj:
+            self._release_conn(conn)
+            return
+
+        http_conn = httplib.HTTPConnection(cli_obj["url"])
+        http_conn.request("GET", "/")
+        skt.sendall(http_conn.getresponse().read())
+        http_conn.close()
 
 
     ''' 连接回调 '''
@@ -131,8 +163,10 @@ class Transformer(object):
             return
 
         conn_skt.setblocking(0)
-        connection = {"socket":conn_skt, "rbuf":""} # 新连接
-        self._cli_conn[addr2string(addr)] = connection
+        connection = { # 新连接
+            "socket":conn_skt, "address":addr2string(addr), "rbuf":""
+        }
+        self._cli_conn[conn_skt] = connection
         self._io_loop.add_handler(conn_skt.fileno(),
                                   partial(self.handle_req, connection),
                                   self._io_loop.READ | self._io_loop.ERROR)
