@@ -15,8 +15,9 @@ import struct
 import errno
 import socket
 import json
+import base64
 import logging
-import urllib, httplib
+import requests
 import crash_on_ipy
 
 from functools import partial
@@ -135,10 +136,14 @@ class Transformer(object):
             self._release_conn(conn)
             return
 
-        http_conn = httplib.HTTPConnection(cli_obj["url"])
-        http_conn.request("GET", "/")
-        skt.sendall(http_conn.getresponse().read())
-        http_conn.close()
+        try:
+            r = requests.get(cli_obj["url"])
+        except requests.exceptions.MissingSchema as e:
+            logging.error(e)
+            self._release_conn(conn)
+            return
+
+        skt.sendall(r.content)
 
 
     ''' 连接回调 '''
@@ -196,6 +201,8 @@ if "__main__" == __name__:
         except RuntimeError as e:
             logging.error("fork failed: {}".format(e))
             time.sleep(60) # 重启间隔
+        except KeyboardInterrupt as e:
+            sys.exit(0)
         else:
             # 子进程
             break
@@ -205,4 +212,7 @@ if "__main__" == __name__:
     io_loop.add_handler(sock_lsn.fileno(),
                         server.handle_connection,
                         io_loop.READ | io_loop.ERROR)
-    io_loop.start()
+    try:
+        io_loop.start()
+    except KeyboardInterrupt as e:
+        sys.exit(0)
