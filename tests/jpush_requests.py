@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/env python
 # -*- coding:utf-8 -*-
 
 
@@ -10,6 +10,7 @@ import requests
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
+        print "no auth"
         sys.exit(1)
 
     auth = base64.encodestring(sys.argv[1]).replace("\n", "")
