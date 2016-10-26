@@ -41,7 +41,7 @@ class Transformer(object):
         self._sock_lsn = sock_lsn
         self._cli_conn = {} # 连接集
         self._MAX_CONNECTIONS = 1
-        self._PROTO_MAGIC_NO = 0xE78F8A9D
+        self._PROTO_MAGIC_NO = 0x9D8A8FE7
         self._LEN_HEADER = 20
         self._LEN_MIN_LOADING = 2
         self._LEN_MIN_PACK = self._LEN_HEADER + self._LEN_MIN_LOADING # 最小包长度(包头+最小json对象)
@@ -132,18 +132,39 @@ class Transformer(object):
             self._release_conn(conn)
             return
 
-        if "jpush_msg" not in cli_obj:
+        if "GET" == cli_obj["method"].upper():
+            try:
+                r = requests.get(cli_obj["url"])
+            except requests.exceptions.MissingSchema as e:
+                logging.error(e)
+                self._release_conn(conn)
+                return
+
+            skt.sendall(r.content)
+        elif "POST" == cli_obj["method"].upper():
+            if "data" not in cli_obj:
+                self._release_conn(conn)
+                return
+
+            headers_extra = {
+                "Authorization": "Basic ZTVhMmU5MGM2MDdhNDFmNjBjZTgwY2ZjOjc3MThkOTEyNTdjMzJjOTliYmNhNzM5OQ==",
+                "content-type": "application/json",
+            }
+
+            try:
+                r = requests.post(cli_obj["url"],
+                                  headers = headers_extra,
+                                  data = cli_obj["data"])
+            except requests.exceptions.MissingSchema as e:
+                logging.error(e)
+                self._release_conn(conn)
+                return
+
+            skt.sendall(r.content)
+        else:
+            ''' unknown method '''
             self._release_conn(conn)
             return
-
-        try:
-            r = requests.get(cli_obj["url"])
-        except requests.exceptions.MissingSchema as e:
-            logging.error(e)
-            self._release_conn(conn)
-            return
-
-        skt.sendall(r.content)
 
 
     ''' 连接回调 '''

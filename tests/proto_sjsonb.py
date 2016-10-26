@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+# -*- coding:utf-8 -*-
 
 
 import sys
@@ -10,7 +11,7 @@ import socket
 def pack_sjsonb(cargo):
     str_cargo = json.dumps(cargo, separators=(",", ":"))
     package = struct.pack(
-        "!5I{}s".format(len(str_cargo)), 0xe78f8a9d, 0, 20, len(str_cargo), 0, str_cargo
+        "!5I{}s".format(len(str_cargo)), 0x9d8a8fe7, 0, 20, len(str_cargo), 0, str_cargo
     )
     return package
 
@@ -30,6 +31,7 @@ if __name__ == "__main__":
         print e
         sys.exit(1)
 
-    cli.send(pack_sjsonb({"method":"get","url":"https://www.baidu.com/","jpush_msg":"asf"}))
+    d = {"platform":"ios","audience":{"alias":["E04CB2D9BCCFBDC9"]},"notification":{"android":{"extras":{"type":"alarm","value0":"0","time":"2016-10-11 17:52:53"},"builder_id":3,"alert":"警报测试"},"ios":{"sound":"happy","extras":{"type":"alarm","value0":"0","time":"2016-10-11 17:52:53"},"badge":1,"alert":"警报测试"}},"options":{"sendno":123456789,"time_to_live":60,"apns_production":True}}
+    cli.send(pack_sjsonb({"method":"post","url":"https://api.jpush.cn/v3/push/","data":json.dumps(d)}))
     buf = cli.recv(4096)
     print buf
